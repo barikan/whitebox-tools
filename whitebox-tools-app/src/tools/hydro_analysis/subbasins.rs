@@ -579,21 +579,6 @@ impl WhiteboxTool for Subbasins {
                     .expect("Error when trying to create pour points file.")
             };
 
-            let upper_connection_points_file = {
-                let output_path = path::Path::new(&output_file);
-                let stem = output_path.file_stem().unwrap().to_str().unwrap();
-                let ext = output_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("tif");
-                let parent = output_path.parent().unwrap_or(path::Path::new(""));
-                parent
-                    .join(format!("{}_upper_connection_points.{}", stem, ext))
-                    .into_os_string()
-                    .into_string()
-                    .expect("Error when trying to create upper connection points file.")
-            };
-
             let mut pour_points_output = Raster::initialize_using_file(&pour_points_file, &streams);
             pour_points_output.configs.data_type = DataType::I32;
             pour_points_output.configs.palette = "qual.plt".to_string();
