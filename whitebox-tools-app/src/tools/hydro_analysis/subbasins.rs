@@ -6,8 +6,6 @@ Last Modified: 04/08/2021
 License: MIT
 */
 
-use whitebox_raster::*;
-use whitebox_common::structures::Array2D;
 use crate::tools::*;
 use std::env;
 use std::f64;
@@ -15,6 +13,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{BufWriter, Error, ErrorKind};
 use std::path;
+use whitebox_common::structures::Array2D;
+use whitebox_raster::*;
 
 /// This tool will identify the catchment areas to each link in a user-specified stream network, i.e. the
 /// network's sub-basins. `Subbasins` effectively performs a stream link ID operation (`StreamLinkIdentifier`) followed by
@@ -101,7 +101,16 @@ impl Subbasins {
             default_value: Some("false".to_string()),
             optional: true,
         });
-        
+
+        parameters.push(ToolParameter {
+            name: "Output pour points raster?".to_owned(),
+            flags: vec!["--pour_point".to_owned()],
+            description: "Output pour points raster file with subbasin IDs?".to_owned(),
+            parameter_type: ParameterType::Boolean,
+            default_value: Some("false".to_string()),
+            optional: true,
+        });
+
         let sep: String = path::MAIN_SEPARATOR.to_string();
         let e = format!("{}", env::current_exe().unwrap().display());
         let mut parent = env::current_exe().unwrap();
@@ -166,6 +175,7 @@ impl WhiteboxTool for Subbasins {
         let mut output_file = String::new();
         let mut esri_style = false;
         let mut output_connections = false;
+        let mut output_pour_points = false;
 
         if args.len() == 0 {
             return Err(Error::new(
@@ -210,15 +220,27 @@ impl WhiteboxTool for Subbasins {
                     output_connections = true;
                 }
             }
+            if flag_val == "-pour_point" {
+                if vec.len() == 1 || !vec[1].to_string().to_lowercase().contains("false") {
+                    output_pour_points = true;
+                }
+            }
         }
 
         if verbose {
             let tool_name = self.get_tool_name();
-            let welcome_len = format!("* Welcome to {} *", tool_name).len().max(28); 
+            let welcome_len = format!("* Welcome to {} *", tool_name).len().max(28);
             // 28 = length of the 'Powered by' by statement.
             println!("{}", "*".repeat(welcome_len));
-            println!("* Welcome to {} {}*", tool_name, " ".repeat(welcome_len - 15 - tool_name.len()));
-            println!("* Powered by WhiteboxTools {}*", " ".repeat(welcome_len - 28));
+            println!(
+                "* Welcome to {} {}*",
+                tool_name,
+                " ".repeat(welcome_len - 15 - tool_name.len())
+            );
+            println!(
+                "* Powered by WhiteboxTools {}*",
+                " ".repeat(welcome_len - 28)
+            );
             println!("* www.whiteboxgeo.com {}*", " ".repeat(welcome_len - 23));
             println!("{}", "*".repeat(welcome_len));
         }
@@ -474,9 +496,9 @@ impl WhiteboxTool for Subbasins {
                 }
             }
         }
-        
+
         if output_connections {
-            let num_outlets = current_id as usize;  // in truth, it's the number of outlets plus one
+            let num_outlets = current_id as usize; // in truth, it's the number of outlets plus one
             let mut connections_table = vec![-1isize; num_outlets];
             let dx = [1, 1, 1, 0, -1, -1, -1, 0];
             let dy = [-1, 0, 1, 1, 1, 0, -1, -1];
@@ -489,8 +511,7 @@ impl WhiteboxTool for Subbasins {
                             z_n = output.get_value(row + dy[i], col + dx[i]);
                             if z_n != z && z_n != nodata {
                                 // neighbouring cell is in a different basin
-                                if pntr.get_value(row + dy[i], col + dx[i]) == inflowing_vals[i]
-                                {
+                                if pntr.get_value(row + dy[i], col + dx[i]) == inflowing_vals[i] {
                                     // neighbour cell flows into (row, col)
                                     connections_table[z_n as usize] = z as isize;
                                 }
@@ -518,9 +539,13 @@ impl WhiteboxTool for Subbasins {
             writer
                 .write_all("UPSTREAM,DOWNSTREAM\n".as_bytes())
                 .expect("Error while writing to CSV file.");
-            
+
             for i in 1..num_outlets {
-                let downstream = if connections_table[i] != -1 {connections_table[i].to_string()} else {"N/A".to_string()};
+                let downstream = if connections_table[i] != -1 {
+                    connections_table[i].to_string()
+                } else {
+                    "N/A".to_string()
+                };
                 let s = format!("{},{}\n", i, downstream);
                 writer
                     .write_all(s.as_bytes())
@@ -534,6 +559,84 @@ impl WhiteboxTool for Subbasins {
             }
         }
 
+        if output_pour_points {
+            if verbose {
+                println!("Creating pour points raster...");
+            }
+
+            let pour_points_file = {
+                let output_path = path::Path::new(&output_file);
+                let stem = output_path.file_stem().unwrap().to_str().unwrap();
+                let ext = output_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("tif");
+                let parent = output_path.parent().unwrap_or(path::Path::new(""));
+                parent
+                    .join(format!("{}_pour_points.{}", stem, ext))
+                    .into_os_string()
+                    .into_string()
+                    .expect("Error when trying to create pour points file.")
+            };
+
+            let upper_connection_points_file = {
+                let output_path = path::Path::new(&output_file);
+                let stem = output_path.file_stem().unwrap().to_str().unwrap();
+                let ext = output_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("tif");
+                let parent = output_path.parent().unwrap_or(path::Path::new(""));
+                parent
+                    .join(format!("{}_upper_connection_points.{}", stem, ext))
+                    .into_os_string()
+                    .into_string()
+                    .expect("Error when trying to create upper connection points file.")
+            };
+
+            let mut pour_points_output = Raster::initialize_using_file(&pour_points_file, &streams);
+            pour_points_output.configs.data_type = DataType::I32;
+            pour_points_output.configs.palette = "qual.plt".to_string();
+            pour_points_output.configs.photometric_interp = PhotometricInterpretation::Categorical;
+            pour_points_output.reinitialize_values(nodata);
+
+            let dx = [1, 1, 1, 0, -1, -1, -1, 0];
+            let dy = [-1, 0, 1, 1, 1, 0, -1, -1];
+            let mut z_n: f64;
+            for row in 0..rows {
+                for col in 0..columns {
+                    z = output.get_value(row, col);
+                    if z != nodata {
+                        for i in 0..8 {
+                            z_n = output.get_value(row + dy[i], col + dx[i]);
+                            if z_n != z && z_n != nodata {
+                                // neighbouring cell is in a different basin
+                                if pntr.get_value(row + dy[i], col + dx[i]) == inflowing_vals[i] {
+                                    pour_points_output[(row + dy[i], col + dx[i])] =
+                                        z_n;
+                                }
+                            }
+                        }
+                    }
+                }
+                if verbose {
+                    progress = (100.0_f64 * row as f64 / (rows - 1) as f64) as usize;
+                    if progress != old_progress {
+                        println!("Creating pour points raster: {}%", progress);
+                        old_progress = progress;
+                    }
+                }
+            }
+
+            let _ = match pour_points_output.write() {
+                Ok(_) => {
+                    if verbose {
+                        println!("Pour points file written: {}", pour_points_file);
+                    }
+                }
+                Err(e) => return Err(e),
+            };
+        }
 
         let elapsed_time = get_formatted_elapsed_time(start);
         output.add_metadata_entry(format!(

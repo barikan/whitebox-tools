@@ -5590,7 +5590,7 @@ Okay, that's it for now.
         if esri_pntr: args.append("--esri_pntr")
         return self.run_tool('strahler_order_basins', args, callback) # returns 1 if error
 
-    def subbasins(self, d8_pntr, streams, output, esri_pntr=False, connections=False, callback=None):
+    def subbasins(self, d8_pntr, streams, output, esri_pntr=False, connections=False, pour_point=False, callback=None):
         """Identifies the catchments, or sub-basin, draining to each link in a stream network.
 
         Keyword arguments:
@@ -5600,6 +5600,7 @@ Okay, that's it for now.
         output -- Output raster file. 
         esri_pntr -- D8 pointer uses the ESRI style scheme. 
         connections -- Output upstream-downstream flow connections among basins?.
+        pour_point -- Output pour points raster file with subbasin IDs?.
         callback -- Custom function for handling tool text outputs.
         """
         args = []
@@ -5608,6 +5609,7 @@ Okay, that's it for now.
         args.append("--output='{}'".format(output))
         if esri_pntr: args.append("--esri_pntr")
         if connections: args.append("--connections")
+        if pour_point: args.append("--pour_point")
         return self.run_tool('subbasins', args, callback) # returns 1 if error
 
     def trace_downslope_flowpaths(self, seed_pts, d8_pntr, output, esri_pntr=False, zero_background=False, callback=None):
