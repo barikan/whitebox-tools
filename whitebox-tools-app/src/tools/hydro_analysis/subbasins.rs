@@ -585,6 +585,28 @@ impl WhiteboxTool for Subbasins {
             pour_points_output.configs.photometric_interp = PhotometricInterpretation::Categorical;
             pour_points_output.reinitialize_values(nodata);
 
+            let connection_points_file = {
+                let output_path = path::Path::new(&output_file);
+                let stem = output_path.file_stem().unwrap().to_str().unwrap();
+                let ext = output_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("tif");
+                let parent = output_path.parent().unwrap_or(path::Path::new(""));
+                parent
+                    .join(format!("{}_connection_points.{}", stem, ext))
+                    .into_os_string()
+                    .into_string()
+                    .expect("Error when trying to create connection points file.")
+            };
+
+            let mut connection_points_output = Raster::initialize_using_file(&connection_points_file, &streams);
+            connection_points_output.configs.data_type = DataType::I32;
+            connection_points_output.configs.palette = "qual.plt".to_string();
+            connection_points_output.configs.photometric_interp = PhotometricInterpretation::Categorical;
+            connection_points_output.reinitialize_values(nodata);
+
+
             let dx = [1, 1, 1, 0, -1, -1, -1, 0];
             let dy = [-1, 0, 1, 1, 1, 0, -1, -1];
             let mut z_n: f64;
@@ -597,8 +619,8 @@ impl WhiteboxTool for Subbasins {
                             if z_n != z && z_n != nodata {
                                 // neighbouring cell is in a different basin
                                 if pntr.get_value(row + dy[i], col + dx[i]) == inflowing_vals[i] {
-                                    pour_points_output[(row + dy[i], col + dx[i])] =
-                                        z_n;
+                                    pour_points_output[(row + dy[i], col + dx[i])] = z_n;
+                                    connection_points_output[(row,col)] = z;
                                 }
                             }
                         }
@@ -617,6 +639,15 @@ impl WhiteboxTool for Subbasins {
                 Ok(_) => {
                     if verbose {
                         println!("Pour points file written: {}", pour_points_file);
+                    }
+                }
+                Err(e) => return Err(e),
+            };
+
+            let _ = match connection_points_output.write() {
+                Ok(_) => {
+                    if verbose {
+                        println!("Connection points file written: {}", connection_points_file);
                     }
                 }
                 Err(e) => return Err(e),
