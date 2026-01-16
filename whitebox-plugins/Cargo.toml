@@ -96,10 +96,9 @@ path = "src/rho8_flow_accumulation/main.rs"
 name = "split_vector_lines"
 path = "src/split_vector_lines/main.rs"
 
-[[bin]]
-name = "travelling_salesman_problem"
-path = "src/travelling_salesman_problem/main.rs"
-required-features = ["tsp-rs-plugin"]
+#[[bin]]
+#name = "travelling_salesman_problem"
+#path = "src/travelling_salesman_problem/main.rs"
 
 [[bin]]
 name = "vector_stream_network_analysis"
@@ -121,7 +120,3 @@ whitebox_common = { path = "../whitebox-common" }
 whitebox_lidar = { path = "../whitebox-lidar" }
 whitebox_raster = { path = "../whitebox-raster" }
 whitebox_vector = { path = "../whitebox-vector" }
-
-[features]
-# Disable TSP plugin by default because tsp-rs is binary-only on crates.io.
-tsp-rs-plugin = []
